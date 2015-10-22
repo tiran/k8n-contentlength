@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: contentlength
+  labels:
+    name: contentlength
+spec:
+  containers:
+  - image: tiran/k8s-contentlength:latest
+    name: contentlength
+    ports:
+      - containerPort: 8080
+        name: contentlength
+

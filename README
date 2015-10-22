@@ -1,0 +1,99 @@
+Reproducer for bug in Kubernetes proxy
+======================================
+
+kubectl proxy doesn't forward Content-Length header to services:
+
+# curl -v -X POST --data-binary @contentlength-bug-pod.yaml http://localhost:8080/api/v1/proxy/namespaces/default/services/contentlength/
+*   Trying ::1...
+* connect to ::1 port 8080 failed: Connection refused
+*   Trying 127.0.0.1...
+* Connected to localhost (127.0.0.1) port 8080 (#0)
+> POST /api/v1/proxy/namespaces/default/services/contentlength/ HTTP/1.1
+> User-Agent: curl/7.40.0
+> Host: localhost:8080
+> Accept: */*
+> Content-Length: 245
+> Content-Type: application/x-www-form-urlencoded
+>
+* upload completely sent off: 245 out of 245 bytes
+< HTTP/1.1 418 I'm a teapot
+< Date: Thu, 22 Oct 2015 11:16:37 GMT
+< Content-Length: 0
+< Content-Type: text/plain; charset=utf-8
+<
+* Connection #0 to host localhost left intact
+
+
+# kubectl logs  contentlength
+('172.16.36.0', 48397)
+POST / HTTP/1.1
+Host: 172.16.20.20:8080
+User-Agent: curl/7.40.0
+Transfer-Encoding: chunked
+Accept: */*
+Content-Type: application/x-www-form-urlencoded
+X-Forwarded-Host:
+X-Forwarded-Proto:
+X-Forwarded-Uri: /api/v1/proxy/namespaces/default/services/contentlength/
+Accept-Encoding: gzip
+
+1
+a
+f4
+piVersion: v1
+kind: Pod
+metadata:
+  name: contentlength
+  labels:
+    name: contentlength
+spec:
+  containers:
+  - image: tiran/k8s-contentlength:latest
+    name: contentlength
+    ports:
+      - containerPort: 8080
+        name: contentlength
+
+
+0
+
+
+---
+
+# tcpdump -A -s 0 -i lo tcp port 8080
+
+13:18:48.562025 IP localhost.50826 > localhost.webcache: Flags [P.], seq 1:450, ack 1, win 342, options [nop,nop,TS val 2483619460 ecr 2483619457], length 449: HTTP: POST /api/v1/proxy/namespaces/default/services/contentlength/ HTTP/1.1
+E.....@.@..`............eA. .Oh....V.......
+.       ...     ..POST /api/v1/proxy/namespaces/default/services/contentlength/ HTTP/1.1
+User-Agent: curl/7.40.0
+Host: localhost:8080
+Accept: */*
+Content-Length: 245
+Content-Type: application/x-www-form-urlencoded
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: contentlength
+  labels:
+    name: contentlength
+spec:
+  containers:
+  - image: tiran/k8s-contentlength:latest
+    name: contentlength
+    ports:
+      - containerPort: 8080
+        name: contentlength
+
+
+13:18:48.562062 IP localhost.webcache > localhost.50826: Flags [.], ack 450, win 350, options [nop,nop,TS val 2483619460 ecr 2483619460], length 0
+E..4n.@.@................Oh.eA.....^.(.....
+.       ...     ..
+13:18:48.568962 IP localhost.webcache > localhost.50826: Flags [P.], seq 1:127, ack 450, win 350, options [nop,nop,TS val 2483619467 ecr 2483619460], length 126: HTTP: HTTP/1.1 418 I'm a teapot
+E...n.@.@..?.............Oh.eA.....^.......
+.       ...     ..HTTP/1.1 418 I'm a teapot
+Date: Thu, 22 Oct 2015 11:18:48 GMT
+Content-Length: 0
+Content-Type: text/plain; charset=utf-8
+
+
